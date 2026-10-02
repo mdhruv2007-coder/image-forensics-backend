@@ -1,0 +1,14 @@
+fastapi
+uvicorn[standard]
+python-multipart
+pydantic
+pydantic-settings
+Pillow
+numpy
+scipy
+opencv-python-headless
+transformers
+huggingface_hub
+exifread
+PyYAML
+reportlab
