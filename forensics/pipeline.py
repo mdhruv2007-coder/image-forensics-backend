@@ -1,3 +1,4 @@
+
 """forensics/pipeline.py
 
 End-to-end analysis pipeline: raw image bytes in, ``AnalysisResult`` out.
@@ -19,7 +20,7 @@ from typing import Final
 from PIL import Image
 
 from forensics.fusion import fuse
-from forensics.layers.ai_detector import AIGeneratedClassifier
+from forensics.layers.ai_detector import AIDetectorLayer
 from forensics.layers.base import Layer, make_skipped_result
 from forensics.layers.copy_move import CopyMoveLayer
 from forensics.layers.ela import ELALayer
@@ -35,7 +36,7 @@ logger = logging.getLogger(__name__)
 # (expected layer_name, layer instance). The name must match the layer_name
 # the layer writes into its LayerResult, and the key in fusion_weights.yaml.
 _LAYERS: Final[tuple[tuple[str, Layer], ...]] = (
-    ("ai_generated_classifier", AIGeneratedClassifier()),
+    ("ai_generated_classifier", AIDetectorLayer()),
     ("ela", ELALayer()),
     ("noise_residual", NoiseResidualLayer()),
     ("copy_move", CopyMoveLayer()),
