@@ -79,6 +79,8 @@ _CLEAR_LOW_SCORE: Final[float] = 0.25     # clearly consistent
 _HEATMAP_MAX_SIDE: Final[int] = 512       # px; long side of the returned heatmap
 _HEATMAP_DEV_FULL_SCALE: Final[float] = 0.8  # |ln dev| that maps to full red
 _MAX_OUTLIER_REGIONS: Final[int] = 25
+_FLOOR_TOLERANCE: Final[float] = 1.5       # sigma <= floor * this counts as "unmeasurable"
+_MAX_FLOOR_FRACTION: Final[float] = 0.25    # skip if more than this share of patches is unmeasurable
 
 _FloatArray = NDArray[np.float64]
 
@@ -130,6 +132,17 @@ class NoiseResidualLayer:
             return make_skipped_result(
                 LAYER_NAME,
                 "too little low-texture, unclipped area to estimate noise reliably",
+            )
+
+        # Heavily compressed / denoised images have a median residual of exactly
+        # zero, so MAD collapses to the floor value. Those patches carry no
+        # information; comparing them yields a fake 0.0 (all at floor) or a fake
+        # high score (floor mixed with real values). Skip instead.
+        at_floor = usable & (sigma <= _SIGMA_FLOOR * _FLOOR_TOLERANCE)
+        if int(at_floor.sum()) / n_valid > _MAX_FLOOR_FRACTION:
+            return make_skipped_result(
+                LAYER_NAME,
+                "no measurable sensor noise (image is heavily compressed or denoised)",
             )
 
         log_sigma = np.log(sigma[usable])
