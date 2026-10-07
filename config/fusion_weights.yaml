@@ -1,6 +1,7 @@
 # Per-layer weights for fusing tamper scores into one 0-1 score.
-# Weights must be non-negative and sum to 1.0. Tune here, not in code.
-ai_detector: 0.25
+# Keys MUST equal each layer's layer_name (the old key "ai_detector" never
+# matched "ai_generated_classifier"). Weights must sum to 1.0.
+ai_generated_classifier: 0.25
 ela: 0.25
 noise_residual: 0.20
 copy_move: 0.30
