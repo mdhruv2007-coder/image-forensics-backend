@@ -1,13 +1,6 @@
-# Per-layer weights for the tamper-score fusion step.
-#
-# Keys must match the `layer_name` each detection layer writes into its
-# LayerResult. Weights must be non-negative and sum to 1.0. Only layers with
-# status "ok" contribute on a given request; their weights are re-normalized
-# among themselves, so a skipped or failed layer never drags the score down.
-#
-# These are starting placeholders. Tune them against labelled data.
-
-ai_generated_classifier: 0.30
+# Per-layer weights for fusing tamper scores into one 0-1 score.
+# Weights must be non-negative and sum to 1.0. Tune here, not in code.
+ai_detector: 0.25
 ela: 0.25
 noise_residual: 0.20
-copy_move: 0.25
+copy_move: 0.30
