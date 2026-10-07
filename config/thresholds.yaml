@@ -1,0 +1,10 @@
+# Verdict thresholds on the fused tamper score (0-1 scale).
+#
+#   score <  authentic_suspicious                    -> "authentic"
+#   authentic_suspicious <= score < suspicious_likely_tampered -> "suspicious"
+#   score >= suspicious_likely_tampered              -> "likely_tampered"
+#
+# Requires 0 <= authentic_suspicious < suspicious_likely_tampered <= 1.
+
+authentic_suspicious: 0.35
+suspicious_likely_tampered: 0.70
