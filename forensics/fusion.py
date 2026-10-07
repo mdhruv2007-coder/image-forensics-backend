@@ -1,94 +1,109 @@
-"""forensics/fusion.py
+"""Weighted fusion of per-layer tamper scores into one 0-1 score.
 
-Combines per-layer suspicion scores into a single fused tamper score.
-
-Weights are read from YAML on every call so they can be tuned without a
-code change. Only layers with ``status == "ok"`` contribute. Their weights
-are re-normalized among themselves, so a skipped or failed layer does not
-silently pull the score toward zero.
-
-This module is pure apart from reading the weights file.
+Weights are loaded from a YAML file on every call so they can be tuned
+without code changes. Only layers with ``status == "ok"`` contribute;
+skipped or failed layers are excluded and the remaining weights are
+renormalized, so a missing layer does not drag the score toward zero.
 """
 
 from __future__ import annotations
 
+import math
+from collections.abc import Sequence
 from pathlib import Path
 
 import yaml
 
 from forensics.schemas import LayerResult
 
-__all__ = ["DEFAULT_WEIGHTS_PATH", "fuse"]
+__all__ = ["fuse", "load_weights"]
 
-DEFAULT_WEIGHTS_PATH: str = "config/fusion_weights.yaml"
-
-_SUM_TOLERANCE: float = 1e-6
+_WEIGHT_SUM_TOLERANCE = 1e-6
 
 
-def fuse(
-    layer_results: list[LayerResult],
-    weights_path: str = DEFAULT_WEIGHTS_PATH,
-) -> float:
-    """Compute the weighted average suspicion score across completed layers.
+def load_weights(weights_path: str) -> dict[str, float]:
+    """Load and validate per-layer fusion weights from a YAML file.
 
     Args:
-        layer_results: Results from every detection layer for one image.
         weights_path: Path to a YAML mapping of layer name to weight.
 
     Returns:
-        The fused tamper score in the range 0-1.
+        Mapping of layer name to non-negative float weight.
 
     Raises:
-        ValueError: If no layer completed with ``status == "ok"``, if a
-            completed layer has no configured weight, or if the configured
-            weights for completed layers total zero.
-        OSError: If the weights file cannot be read.
+        ValueError: If the file is not a mapping, a weight is not a
+            non-negative number, or the weights do not sum to 1.0.
+        OSError: If the file cannot be read.
     """
-    weights = _load_weights(weights_path)
+    with Path(weights_path).open("r", encoding="utf-8") as fh:
+        raw = yaml.safe_load(fh)
 
-    completed = [result for result in layer_results if result.status == "ok"]
-    if not completed:
-        raise ValueError("Cannot fuse scores: no detection layer completed successfully.")
+    if not isinstance(raw, dict):
+        raise ValueError(f"{weights_path}: expected a mapping of layer weights")
 
-    unknown = sorted({result.layer_name for result in completed} - set(weights))
-    if unknown:
+    weights: dict[str, float] = {}
+    for name, value in raw.items():
+        if not isinstance(name, str):
+            raise ValueError(f"{weights_path}: layer name {name!r} is not a string")
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError(f"{weights_path}: weight for {name!r} is not a number")
+        weight = float(value)
+        if not math.isfinite(weight) or weight < 0.0:
+            raise ValueError(
+                f"{weights_path}: weight for {name!r} must be finite and >= 0"
+            )
+        weights[name] = weight
+
+    total = sum(weights.values())
+    if abs(total - 1.0) > _WEIGHT_SUM_TOLERANCE:
         raise ValueError(
-            f"No fusion weight configured for layer(s): {', '.join(unknown)}."
+            f"{weights_path}: weights must sum to 1.0, got {total:.6f}"
         )
-
-    total_weight = sum(weights[result.layer_name] for result in completed)
-    if total_weight <= 0.0:
-        raise ValueError("Completed layers have zero total fusion weight.")
-
-    weighted_sum = sum(weights[result.layer_name] * result.score for result in completed)
-    return weighted_sum / total_weight
+    return weights
 
 
-def _load_weights(weights_path: str) -> dict[str, float]:
-    """Load and validate the layer weight mapping from a YAML file.
+def fuse(
+    layer_results: Sequence[LayerResult],
+    weights_path: str = "config/fusion_weights.yaml",
+) -> float:
+    """Fuse per-layer scores into a single tamper score in [0, 1].
+
+    Only results with ``status == "ok"`` are used. Their weights are
+    renormalized to sum to 1 before averaging, so skipped or failed
+    layers are excluded rather than counted as zero.
 
     Args:
-        weights_path: Path to the YAML weights file.
+        layer_results: Results from every layer that ran, including
+            skipped and failed ones.
+        weights_path: Path to the fusion weights YAML file.
 
     Returns:
-        A dict mapping layer name to a non-negative float weight.
+        The weighted average of the ``ok`` layer scores, clamped to [0, 1].
 
     Raises:
-        ValueError: If the file is not a non-empty mapping, contains a
-            negative weight, or the weights do not sum to 1.0.
+        ValueError: If no ``ok`` results exist, an ``ok`` layer has no
+            configured weight, a layer name appears more than once among
+            the ``ok`` results, or the weights are invalid.
     """
-    with Path(weights_path).open(encoding="utf-8") as handle:
-        raw = yaml.safe_load(handle)
+    weights = load_weights(weights_path)
 
-    if not isinstance(raw, dict) or not raw:
-        raise ValueError(f"{weights_path} must contain a non-empty mapping of layer name to weight.")
+    usable: list[LayerResult] = [r for r in layer_results if r.status == "ok"]
+    if not usable:
+        raise ValueError("no layer results with status 'ok' to fuse")
 
-    weights = {str(name): float(value) for name, value in raw.items()}
+    seen: set[str] = set()
+    for result in usable:
+        if result.layer_name not in weights:
+            raise ValueError(
+                f"layer {result.layer_name!r} has no weight in {weights_path}"
+            )
+        if result.layer_name in seen:
+            raise ValueError(f"duplicate ok result for layer {result.layer_name!r}")
+        seen.add(result.layer_name)
 
-    if any(value < 0.0 for value in weights.values()):
-        raise ValueError(f"{weights_path} contains a negative weight.")
+    total_weight = sum(weights[r.layer_name] for r in usable)
+    if total_weight <= 0.0:
+        raise ValueError("configured weights of the ok layers sum to zero")
 
-    if abs(sum(weights.values()) - 1.0) > _SUM_TOLERANCE:
-        raise ValueError(f"Fusion weights in {weights_path} must sum to 1.0.")
-
-    return weights
+    fused = sum(weights[r.layer_name] * r.score for r in usable) / total_weight
+    return min(max(fused, 0.0), 1.0)
