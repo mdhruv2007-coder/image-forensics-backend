@@ -1,0 +1,9 @@
+filename,label,source,licence,expected_verdict
+Au_ani_00001.jpg,real,CASIA v2,research use only,authentic
+Au_nat_00002.jpg,real,CASIA v2,research use only,authentic
+Tp_D_CND_S_N_ani00001.jpg,spliced,CASIA v2,research use only,likely_tampered
+Tp_D_NRN_S_N_nat00003.jpg,spliced,CASIA v2,research use only,suspicious
+001_F.png,copy_move,CoMoFoD,research use only,likely_tampered
+002_F.png,copy_move,CoMoFoD,research use only,likely_tampered
+ai_portrait_01.jpg,ai_generated,self-generated,own work / no restrictions,likely_tampered
+ai_landscape_02.jpg,ai_generated,self-generated,own work / no restrictions,suspicious
