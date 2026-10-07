@@ -15,8 +15,7 @@ from typing import Final
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
  
-from config import settings
- 
+from app.core.config import settings 
 APP_TITLE: Final[str] = "Image Forensics API"
 APP_VERSION: Final[str] = "0.1.0"
  
