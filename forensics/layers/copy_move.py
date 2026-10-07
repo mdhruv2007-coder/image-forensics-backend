@@ -195,6 +195,25 @@ def _bbox(points: np.ndarray, scale: float) -> dict[str, int]:
     return {"x1": int(lo[0]), "y1": int(lo[1]), "x2": int(hi[0]), "y2": int(hi[1])}
 
 
+def _overlap_fraction(a_lo: float, a_hi: float, b_lo: float, b_hi: float) -> float:
+    """Overlap of two 1-D intervals as a fraction of the smaller one."""
+    inter = max(0.0, min(a_hi, b_hi) - max(a_lo, b_lo))
+    return inter / max(1.0, min(a_hi - a_lo, b_hi - b_lo))
+
+
+def _is_self_similar(src: np.ndarray, dst: np.ndarray, threshold: float = 0.25) -> bool:
+    """True if the source and copy regions overlap each other.
+
+    A genuine clone has two separate regions. Repeating structure (keyboard
+    keys, text lines, tiles, fences) produces "matches" whose source and
+    target areas overlap, so they are rejected as periodic texture.
+    """
+    return (
+        _overlap_fraction(src[:, 0].min(), src[:, 0].max(), dst[:, 0].min(), dst[:, 0].max()) > threshold
+        and _overlap_fraction(src[:, 1].min(), src[:, 1].max(), dst[:, 1].min(), dst[:, 1].max()) > threshold
+    )
+
+
 def _extent(points: np.ndarray) -> float:
     return float(np.linalg.norm(points.max(axis=0) - points.min(axis=0)))
 
@@ -268,7 +287,9 @@ class CopyMoveLayer:
             disp = dst - src
             for members in _cluster_displacements(disp):
                 both = np.vstack([src[members], dst[members]])
-                if _extent(both) >= MIN_CLUSTER_EXTENT_PX:
+                if _extent(both) >= MIN_CLUSTER_EXTENT_PX and not _is_self_similar(
+                    src[members], dst[members]
+                ):
                     clusters.append(members)
             clusters.sort(key=len, reverse=True)
 
