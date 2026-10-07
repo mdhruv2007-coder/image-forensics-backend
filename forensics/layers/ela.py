@@ -49,6 +49,7 @@ import io
 from typing import Any
 
 import numpy as np
+from scipy import ndimage
 from PIL import Image, ImageChops, UnidentifiedImageError
 
 from forensics.schemas import LayerResult
@@ -69,6 +70,8 @@ OUTLIER_SIGMAS = 4.0
 NON_JPEG_SCORE_DAMPING = 0.5
 MIN_MEANINGFUL_BLOCK_ERROR = 2.0  # below this (0-255 scale) error is noise
 _EPS = 1e-6
+TEXTURE_OFFSET = 8.0   # keeps flat blocks from dominating the ratio
+TEXTURE_SCALE = 10.0   # brings normalised error back to a comparable numeric range
 
 
 def _skipped(reason: str) -> LayerResult:
@@ -180,6 +183,12 @@ class ELALayer:
             return _skipped(f"image_not_processable: {type(exc).__name__}")
 
         blocks = _block_means(error)
+        # Error is naturally high on edges/text and low on flat areas. Judge each
+        # block's error relative to its own texture so ordinary detail is not
+        # mistaken for editing.
+        gray = np.asarray(rgb.convert("L"), dtype=np.float32)
+        texture = _block_means(np.hypot(ndimage.sobel(gray, axis=0), ndimage.sobel(gray, axis=1)))
+        blocks = blocks / (texture + TEXTURE_OFFSET) * TEXTURE_SCALE
         raw_score, stats = _score_blocks(blocks)
 
         is_jpeg = original_format == "JPEG"
@@ -198,6 +207,7 @@ class ELALayer:
             "original_format": original_format,
             "source_is_jpeg": is_jpeg,
             "block_size": BLOCK_SIZE,
+            "texture_normalised": True,
             "raw_score_before_damping": round(raw_score, 4),
             "amplification_reference": round(scale_ref, 3),
             "error_map_png_b64": _png_b64(amplified),
