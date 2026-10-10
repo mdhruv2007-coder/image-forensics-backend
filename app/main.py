@@ -21,6 +21,16 @@ from app.core.config import settings
 APP_TITLE: Final[str] = "Image Forensics API"
 APP_VERSION: Final[str] = "0.1.0"
 
+# Vercel gives every branch/commit of the frontend its own preview URL
+# (e.g. image-forensics-frontend-git-<branch>-<team>.vercel.app, or
+# image-forensics-frontend-<hash>-<team>.vercel.app), plus a stable
+# production URL (image-forensics-frontend-<team>.vercel.app, or
+# image-forensics-frontend.vercel.app if aliased). Rather than adding each
+# new preview URL to CORS_ORIGINS by hand, match them all with one regex.
+VERCEL_PREVIEW_ORIGIN_REGEX: Final[str] = (
+    r"^https://image-forensics-frontend(-[a-z0-9-]+)?\.vercel\.app$"
+)
+
 
 def _validate_cors_origins(origins: list[str]) -> list[str]:
     """Fail fast if the configured CORS origins include a wildcard."""
@@ -40,6 +50,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_validate_cors_origins(settings.cors_origins_list),
+    allow_origin_regex=VERCEL_PREVIEW_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
